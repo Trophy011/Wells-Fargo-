@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // USERS COLLECTION
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // TRANSACTIONS COLLECTION
+    match /transactions/{txId} {
+      allow read, write: if true;
+    }
+
+    // ADMIN TREASURY (10 Billion USD liquidity pool)
+    match /adminTreasury/{treasuryId} {
+      allow read, write: if true;
+    }
+
+    // LIVE SUPPORT CHAT THREADS & MESSAGES
+    match /supportThreads/{threadId} {
+      allow read, write: if true;
+
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+
+    // AUDIT LOGS
+    match /auditLogs/{logId} {
+      allow read, write: if true;
+    }
+
+    // GLOBAL PERMISSIVE RULE FOR SEEDING & APP OPERATIONS
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

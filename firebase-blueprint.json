@@ -1,0 +1,150 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Wells Fargo user account details, balance, credentials, and account settings.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user identifier" },
+        "email": { "type": "string", "format": "email", "description": "User email address" },
+        "fullName": { "type": "string", "maxLength": 100, "description": "Full legal name" },
+        "role": { "type": "string", "enum": ["admin", "customer"], "description": "Role within the bank" },
+        "accountNumber": { "type": "string", "description": "10-digit unique Wells Fargo account number" },
+        "routingNumber": { "type": "string", "description": "9-digit routing transit number" },
+        "balance": { "type": "number", "description": "Available checking account balance in USD" },
+        "currency": { "type": "string", "description": "Primary base currency (USD)" },
+        "isLocked": { "type": "boolean", "description": "Whether the account is locked by admin management" },
+        "isTransferRestricted": { "type": "boolean", "description": "Whether outgoing transfers are restricted by admin" },
+        "warningMessage": { "type": "string", "maxLength": 500, "description": "Official admin compliance or operational warning message" },
+        "transactionPin": { "type": "string", "maxLength": 4, "description": "Encrypted or hashed 4-digit transfer authorization PIN" },
+        "phone": { "type": "string", "maxLength": 25, "description": "Contact phone number" },
+        "address": { "type": "string", "maxLength": 200, "description": "Residential address" },
+        "accountType": { "type": "string", "enum": ["Checking", "Savings", "Private Wealth", "Corporate Treasury"], "description": "Type of banking account" },
+        "createdAt": { "type": "string", "description": "Account registration timestamp" },
+        "updatedAt": { "type": "string", "description": "Profile update timestamp" }
+      },
+      "required": ["uid", "email", "fullName", "role", "accountNumber", "balance"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Internal and international funds transfers, deposits, funding, and reversals.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique transaction tracking reference" },
+        "senderId": { "type": "string", "description": "UID of the sending party or 'SYSTEM_OPERATOR'" },
+        "senderName": { "type": "string", "description": "Name of sender" },
+        "senderAccount": { "type": "string", "description": "Account number of sender" },
+        "recipientId": { "type": "string", "description": "UID of the recipient or 'EXTERNAL_BENEFICIARY'" },
+        "recipientName": { "type": "string", "description": "Name of recipient" },
+        "recipientAccount": { "type": "string", "description": "Recipient account or IBAN" },
+        "recipientBank": { "type": "string", "description": "Bank name for international or external transfers" },
+        "recipientCountry": { "type": "string", "description": "Destination country code or name" },
+        "swiftCode": { "type": "string", "description": "SWIFT / BIC code for international wires" },
+        "amount": { "type": "number", "description": "Transfer amount in USD" },
+        "fee": { "type": "number", "description": "Processing fee in USD" },
+        "type": { "type": "string", "enum": ["internal", "international", "funding", "reversal"], "description": "Classification of transaction" },
+        "status": { "type": "string", "enum": ["completed", "pending", "reversed", "flagged"], "description": "Current clearance status" },
+        "description": { "type": "string", "maxLength": 300, "description": "Transfer memo or transaction description" },
+        "reference": { "type": "string", "description": "Wells Fargo Wire Reference Code (e.g., WF-WIRE-xxxx)" },
+        "createdAt": { "type": "string", "description": "Transaction initiation timestamp" },
+        "reversedAt": { "type": "string", "description": "Timestamp of reversal if applicable" },
+        "reversedBy": { "type": "string", "description": "Admin email who reversed the transaction" },
+        "reversalReason": { "type": "string", "description": "Operator reason for reversing the transaction" }
+      },
+      "required": ["id", "senderId", "recipientName", "amount", "type", "status", "reference", "createdAt"]
+    },
+    "AdminTreasury": {
+      "title": "AdminTreasury",
+      "description": "Wells Fargo central vault and liquidity pool.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID (default: 'vault')" },
+        "institutionName": { "type": "string", "description": "Wells Fargo Federal Reserve & Institutional Vault" },
+        "balance": { "type": "number", "description": "10 Billion USD Central Management Vault Balance" },
+        "currency": { "type": "string", "description": "Base currency" },
+        "lastUpdated": { "type": "string", "description": "Last operation timestamp" },
+        "totalFundedToUsers": { "type": "number", "description": "Total liquidity distributed to customers" },
+        "totalReversed": { "type": "number", "description": "Total reversed transaction volume" }
+      },
+      "required": ["id", "balance", "institutionName"]
+    },
+    "SupportThread": {
+      "title": "SupportThread",
+      "description": "Live support chat thread between customer and Wells Fargo operator.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Support conversation thread ID" },
+        "userId": { "type": "string", "description": "Customer UID" },
+        "userEmail": { "type": "string", "description": "Customer Email" },
+        "userName": { "type": "string", "description": "Customer Full Name" },
+        "userAccountNumber": { "type": "string", "description": "Customer Account Number" },
+        "lastMessage": { "type": "string", "maxLength": 500, "description": "Preview of last message sent" },
+        "lastMessageTimestamp": { "type": "string", "description": "Timestamp of latest activity" },
+        "unreadByAdmin": { "type": "boolean", "description": "Whether admin has unread messages" },
+        "unreadByUser": { "type": "boolean", "description": "Whether customer has unread messages" },
+        "status": { "type": "string", "enum": ["open", "resolved"], "description": "Thread status" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Update timestamp" }
+      },
+      "required": ["id", "userId", "userEmail", "userName", "status", "createdAt"]
+    },
+    "SupportMessage": {
+      "title": "SupportMessage",
+      "description": "Individual chat message containing text, pictures, or documents.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Message ID" },
+        "threadId": { "type": "string", "description": "Parent thread identifier" },
+        "senderId": { "type": "string", "description": "Sender UID or 'ADMIN_OPERATOR'" },
+        "senderName": { "type": "string", "description": "Sender display name" },
+        "senderRole": { "type": "string", "enum": ["customer", "admin"], "description": "Sender role" },
+        "text": { "type": "string", "maxLength": 2000, "description": "Message text content" },
+        "attachmentUrl": { "type": "string", "description": "Base64 encoded data URI or URL of picture or document" },
+        "attachmentName": { "type": "string", "maxLength": 100, "description": "File name of attachment" },
+        "attachmentType": { "type": "string", "enum": ["image", "document"], "description": "Attachment classification" },
+        "timestamp": { "type": "string", "description": "Message send timestamp" }
+      },
+      "required": ["id", "threadId", "senderId", "senderRole", "timestamp"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Administrative events, AI executive actions, security flags, and reversals.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Log record identifier" },
+        "actor": { "type": "string", "description": "Admin email or AI System Operator" },
+        "action": { "type": "string", "description": "Action performed (e.g., REVERSE_TRANSACTION, FUND_ACCOUNT, LOCK_ACCOUNT, RESTRICT_TRANSFERS, ISSUE_WARNING, AI_COMMAND)" },
+        "targetUser": { "type": "string", "description": "Target customer email or account number" },
+        "details": { "type": "string", "description": "Summary of parameters and result" },
+        "timestamp": { "type": "string", "description": "Event timestamp" }
+      },
+      "required": ["id", "actor", "action", "details", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles, credentials, balances, and operational settings."
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Ledger of all transfers, incoming funds, and reversals."
+    },
+    "/adminTreasury/{treasuryId}": {
+      "schema": "AdminTreasury",
+      "description": "Central banking liquidity vault maintaining the 10 Billion USD capital pool."
+    },
+    "/supportThreads/{threadId}": {
+      "schema": "SupportThread",
+      "description": "Support chat threads for each customer."
+    },
+    "/supportThreads/{threadId}/messages/{messageId}": {
+      "schema": "SupportMessage",
+      "description": "Live support chat messages with image and document attachment capability."
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Audit trail of operator management actions and AI executive directives."
+    }
+  }
+}
