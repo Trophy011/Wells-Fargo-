@@ -694,8 +694,8 @@ export const AdminPortal: React.FC = () => {
                 </button>
               </div>
               <div className="divide-y divide-slate-800/80">
-                {users.slice(0, 4).map(u => (
-                  <div key={u.uid} className="py-3 flex items-center justify-between text-xs">
+                {users.slice(0, 4).map((u, idx) => (
+                  <div key={`${u.uid || u.email || 'usr'}-${idx}`} className="py-3 flex items-center justify-between text-xs">
                     <div>
                       <p className="font-bold text-white">{u.fullName}</p>
                       <p className="text-[11px] text-slate-400 font-mono">ACCT: {u.accountNumber} &bull; {u.email}</p>
@@ -798,8 +798,8 @@ export const AdminPortal: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {filteredUsers.map((u) => (
-                  <tr key={u.uid} className="hover:bg-slate-800/30 transition-colors">
+                {filteredUsers.map((u, idx) => (
+                  <tr key={`${u.uid || u.email || 'usr'}-${idx}`} className="hover:bg-slate-800/30 transition-colors">
                     <td className="py-3.5 px-4">
                       <p className="font-bold text-white">{u.fullName}</p>
                       <p className="text-[11px] text-slate-400">{u.email}</p>
@@ -963,11 +963,11 @@ export const AdminPortal: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {filteredTransactions.map((tx) => {
+                {filteredTransactions.map((tx, txIdx) => {
                   const isReversed = tx.status === 'reversed';
 
                   return (
-                    <tr key={tx.id} className="hover:bg-slate-800/30 transition-colors">
+                    <tr key={`${tx.id || tx.reference || 'tx'}-${txIdx}`} className="hover:bg-slate-800/30 transition-colors">
                       <td className="py-3.5 px-4 font-mono text-slate-400">
                         <p className="text-white font-bold">{tx.reference}</p>
                         <p className="text-[10px] text-slate-500">{new Date(tx.createdAt).toLocaleString()}</p>
@@ -1061,13 +1061,13 @@ export const AdminPortal: React.FC = () => {
                   <p>No customer chats initiated yet.</p>
                 </div>
               ) : (
-                supportThreads.map((thread) => {
+                supportThreads.map((thread, thIdx) => {
                   const isSelected = selectedThread?.id === thread.id;
                   const hasUnread = thread.unreadByAdmin;
 
                   return (
                     <button
-                      key={thread.id}
+                      key={`${thread.id}-${thIdx}`}
                       onClick={() => setSelectedThread(thread)}
                       className={`w-full p-4 text-left transition-colors flex items-start gap-3 ${
                         isSelected 
@@ -1141,12 +1141,12 @@ export const AdminPortal: React.FC = () => {
 
                 {/* Messages Feed */}
                 <div className="flex-1 p-5 overflow-y-auto space-y-4 bg-slate-950/40 text-xs">
-                  {chatMessages.map((msg) => {
+                  {chatMessages.map((msg, msgIdx) => {
                     const isAdminMsg = msg.senderRole === 'admin';
 
                     return (
                       <div 
-                        key={msg.id}
+                        key={`${msg.id || 'msg'}-${msgIdx}`}
                         className={`flex flex-col ${isAdminMsg ? 'items-end' : 'items-start'}`}
                       >
                         <span className="text-[10px] font-mono text-slate-500 mb-1 px-1">
@@ -1400,8 +1400,8 @@ export const AdminPortal: React.FC = () => {
           </div>
 
           <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1 text-xs">
-            {auditLogs.map((log) => (
-              <div key={log.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 flex items-start justify-between gap-4 font-mono">
+            {auditLogs.map((log, logIdx) => (
+              <div key={`${log.id || 'log'}-${logIdx}`} className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 flex items-start justify-between gap-4 font-mono">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">

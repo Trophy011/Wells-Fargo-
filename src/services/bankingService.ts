@@ -875,9 +875,19 @@ export function subscribeToUserTransactions(uid: string, callback: (txs: BankTra
   return onSnapshot(
     q,
     (snap) => {
-      const all = snap.docs.map(d => d.data() as BankTransaction);
-      const filtered = all.filter(t => t.senderId === uid || t.recipientId === uid);
-      callback(filtered);
+      const seen = new Set<string>();
+      const list: BankTransaction[] = [];
+      snap.docs.forEach((d) => {
+        const t = d.data() as BankTransaction;
+        const id = t.id || d.id;
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          if (t.senderId === uid || t.recipientId === uid) {
+            list.push({ ...t, id });
+          }
+        }
+      });
+      callback(list);
     },
     (err) => {
       console.warn('User transactions listener notice:', err);
@@ -890,7 +900,26 @@ export function subscribeToAllUsers(callback: (users: BankUser[]) => void) {
   return onSnapshot(
     q,
     (snap) => {
-      callback(snap.docs.map(d => d.data() as BankUser));
+      const seenUids = new Set<string>();
+      const seenEmails = new Set<string>();
+      const uniqueUsers: BankUser[] = [];
+
+      snap.docs.forEach((d) => {
+        const data = d.data() as BankUser;
+        const uid = data.uid || d.id;
+        const cleanEmail = (data.email || '').toLowerCase().trim();
+
+        // Prevent duplicate user entries (e.g. operator aliases or duplicate seeding docs)
+        if (seenUids.has(uid) || (cleanEmail && seenEmails.has(cleanEmail))) {
+          return;
+        }
+
+        seenUids.add(uid);
+        if (cleanEmail) seenEmails.add(cleanEmail);
+        uniqueUsers.push({ ...data, uid });
+      });
+
+      callback(uniqueUsers);
     },
     (err) => {
       console.warn('All users directory listener notice:', err);
@@ -903,7 +932,17 @@ export function subscribeToAllTransactions(callback: (txs: BankTransaction[]) =>
   return onSnapshot(
     q,
     (snap) => {
-      callback(snap.docs.map(d => d.data() as BankTransaction));
+      const seen = new Set<string>();
+      const list: BankTransaction[] = [];
+      snap.docs.forEach((d) => {
+        const t = d.data() as BankTransaction;
+        const id = t.id || d.id;
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          list.push({ ...t, id });
+        }
+      });
+      callback(list);
     },
     (err) => {
       console.warn('All transactions listener notice:', err);
@@ -930,7 +969,17 @@ export function subscribeToAuditLogs(callback: (logs: AuditLog[]) => void) {
   return onSnapshot(
     q,
     (snap) => {
-      callback(snap.docs.map(d => d.data() as AuditLog));
+      const seen = new Set<string>();
+      const list: AuditLog[] = [];
+      snap.docs.forEach((d) => {
+        const l = d.data() as AuditLog;
+        const id = l.id || d.id;
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          list.push({ ...l, id });
+        }
+      });
+      callback(list);
     },
     (err) => {
       console.warn('Audit logs listener notice:', err);

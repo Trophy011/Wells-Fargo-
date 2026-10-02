@@ -175,8 +175,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       try {
         await setDoc(doc(db, 'users', activeAdminUid), adminUser, { merge: true });
-        await setDoc(doc(db, 'users', 'wf_admin_operator_master'), adminUser, { merge: true });
-        await setDoc(doc(db, 'users', 'wells_fargo_admin_operator_master'), adminUser, { merge: true });
       } catch (e) {
         console.warn('Admin record sync notice:', e);
       }

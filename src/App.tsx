@@ -75,8 +75,8 @@ function MainApp() {
         )}
       </main>
 
-      {/* Professional Footer */}
-      <Footer />
+      {/* Professional Footer for Portal Views */}
+      {activeView !== 'landing' && <Footer />}
 
       {/* Authentication Modal */}
       <AuthModal
@@ -86,8 +86,8 @@ function MainApp() {
         onLoginSuccess={() => setIsAuthModalOpen(false)}
       />
 
-      {/* Floating 24/7 Live Customer Support Chat */}
-      <CustomerSupportChat onOpenAuth={handleOpenAuth} />
+      {/* Floating 24/7 Live Customer Support Chat for Authenticated Dashboard & Admin */}
+      {activeView !== 'landing' && <CustomerSupportChat onOpenAuth={handleOpenAuth} />}
     </div>
   );
 }

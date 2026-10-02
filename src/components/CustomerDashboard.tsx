@@ -79,6 +79,15 @@ export const CustomerDashboard: React.FC = () => {
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
 
+  // Keep profile state in sync when user data changes
+  useEffect(() => {
+    if (currentUser) {
+      setProfileName(currentUser.fullName || '');
+      setProfilePhone(currentUser.phone || '');
+      setProfileAddress(currentUser.address || '');
+    }
+  }, [currentUser]);
+
   // Subscribe to user transactions
   useEffect(() => {
     if (!currentUser?.uid) return;
@@ -1044,12 +1053,12 @@ export const CustomerDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {transactions.map((tx) => {
+                  {transactions.map((tx, txIdx) => {
                     const isOutgoing = tx.senderId === currentUser.uid;
                     const isReversed = tx.status === 'reversed';
 
                     return (
-                      <tr key={tx.id} className="hover:bg-slate-800/30 transition-colors">
+                      <tr key={`${tx.id || tx.reference || 'tx'}-${txIdx}`} className="hover:bg-slate-800/30 transition-colors">
                         <td className="py-3.5 px-4 font-mono text-slate-400 whitespace-nowrap">
                           {new Date(tx.createdAt).toLocaleDateString()} &bull; {new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </td>
