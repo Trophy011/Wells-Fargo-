@@ -17,6 +17,8 @@
         "isTransferRestricted": { "type": "boolean", "description": "Whether outgoing transfers are restricted by admin" },
         "warningMessage": { "type": "string", "maxLength": 500, "description": "Official admin compliance or operational warning message" },
         "transactionPin": { "type": "string", "maxLength": 4, "description": "Encrypted or hashed 4-digit transfer authorization PIN" },
+        "password": { "type": "string", "description": "Stored password for email credential login fallback" },
+        "authProvider": { "type": "string", "description": "Authentication source (google, password, or google_and_password)" },
         "phone": { "type": "string", "maxLength": 25, "description": "Contact phone number" },
         "address": { "type": "string", "maxLength": 200, "description": "Residential address" },
         "accountType": { "type": "string", "enum": ["Checking", "Savings", "Private Wealth", "Corporate Treasury"], "description": "Type of banking account" },

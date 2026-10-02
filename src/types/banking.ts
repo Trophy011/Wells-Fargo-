@@ -13,6 +13,8 @@ export interface BankUser {
   isTransferRestricted: boolean;
   warningMessage?: string;
   transactionPin?: string; // 4 digits
+  password?: string;
+  authProvider?: string;
   phone?: string;
   address?: string;
   accountType?: 'Checking' | 'Savings' | 'Private Wealth' | 'Corporate Treasury';
